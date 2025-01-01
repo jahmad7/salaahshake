@@ -394,11 +394,11 @@ export default function Index() {
       
       <View style={[styles.instructionContainer, { backgroundColor: theme.primary + '15' }]}>
         {completedPrayers.includes(currentPrayer) ? (
-          <Text style={[styles.instruction, { color: theme.success }]}>
+          <Text style={[styles.instruction, { color: theme.success, fontWeight: 'bold' }]}>
             Prayer logged ✓
           </Text>
         ) : (
-          <Text style={[styles.instruction, { color: theme.textSecondary }]}>
+          <Text style={[styles.instruction, { color: theme.text, fontWeight: 'bold' }]}>
             Shake phone after praying {currentPrayer}
           </Text>
         )}
