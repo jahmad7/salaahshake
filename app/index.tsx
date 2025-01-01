@@ -53,6 +53,10 @@ interface Styles {
   missedText: TextStyle;
   statusEmoji: TextStyle;
   statusIcon: TextStyle;
+  header: ViewStyle;
+  streakContainer: ViewStyle;
+  streakEmoji: TextStyle;
+  streakText: TextStyle;
 }
 
 interface PrayerStatus {
@@ -70,6 +74,7 @@ export default function Index() {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [completedPrayers, setCompletedPrayers] = useState<string[]>([]);
   const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
+  const [streak, setStreak] = useState<number>(0);
 
   useEffect(() => {
     let subscription: any;
@@ -93,6 +98,7 @@ export default function Index() {
       setCompletedPrayers(newCompletedPrayers);
       const today = format(new Date(), 'yyyy-MM-dd');
       AsyncStorage.setItem(`prayers_${today}`, JSON.stringify(newCompletedPrayers));
+      updateStreak(newCompletedPrayers);
     }
   }, [x, y, z, currentPrayer, completedPrayers]);
 
@@ -171,6 +177,35 @@ export default function Index() {
       }
     };
     loadCompletedPrayers();
+  }, []);
+
+  const updateStreak = async (newCompletedPrayers: string[]) => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const yesterday = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
+    
+    // Get yesterday's prayers
+    const yesterdayPrayers = await AsyncStorage.getItem(`prayers_${yesterday}`);
+    const yesterdayCompleted = yesterdayPrayers ? JSON.parse(yesterdayPrayers) : [];
+    
+    // Get current streak
+    const currentStreak = await AsyncStorage.getItem('prayer_streak');
+    let streakCount = currentStreak ? parseInt(currentStreak) : 0;
+    
+    // Add today's completed prayers to streak
+    streakCount += newCompletedPrayers.length - completedPrayers.length;
+    
+    await AsyncStorage.setItem('prayer_streak', streakCount.toString());
+    setStreak(streakCount);
+  };
+
+  useEffect(() => {
+    const loadStreak = async () => {
+      const currentStreak = await AsyncStorage.getItem('prayer_streak');
+      if (currentStreak) {
+        setStreak(parseInt(currentStreak));
+      }
+    };
+    loadStreak();
   }, []);
 
   const getPrayerStatus = (prayer: string): PrayerStatus => {
@@ -338,12 +373,22 @@ export default function Index() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <Text style={[styles.currentPrayer, { color: theme.text }]}>
-        {currentPrayer}
-      </Text>
-      <Text style={[styles.timeRemaining, { color: theme.textSecondary }]}>
-        {timeRemaining} remaining
-      </Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.currentPrayer, { color: theme.text }]}>
+            {currentPrayer}
+          </Text>
+          <Text style={[styles.timeRemaining, { color: theme.textSecondary }]}>
+            {timeRemaining} remaining
+          </Text>
+        </View>
+        <View style={[styles.streakContainer, { backgroundColor: theme.primary + '15' }]}>
+          <Text style={[styles.streakEmoji]}>🌙</Text>
+          <Text style={[styles.streakText, { color: theme.text }]}>
+            {streak} {streak === 1 ? 'prayer' : 'prayers'}
+          </Text>
+        </View>
+      </View>
       
       {renderSunDial()}
       
@@ -490,5 +535,26 @@ const styles = StyleSheet.create<Styles>({
     marginRight: spacing.sm,
     width: 30,
     textAlign: 'center',
+  },
+  header: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.md,
+  },
+  streakContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: 12,
+  },
+  streakEmoji: {
+    fontSize: fontSize.large,
+    marginRight: spacing.xs,
+  },
+  streakText: {
+    fontSize: fontSize.regular,
+    fontWeight: 'bold',
   },
 }); 
