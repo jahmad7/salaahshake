@@ -14,11 +14,11 @@ const PRAYER_NAMES = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const SHAKE_THRESHOLD = 1.5;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PADDING = 32;
-const DIAL_SIZE = SCREEN_WIDTH - (PADDING * 2); // More padding for sides
-const DIAL_RADIUS = (DIAL_SIZE / 2) * 0.85; // Slightly smaller radius to prevent cropping
+const DIAL_SIZE = SCREEN_WIDTH - (PADDING * 2);
+const DIAL_RADIUS = (DIAL_SIZE / 2) * 0.85;
 const CENTER_X = DIAL_SIZE / 2;
 const CENTER_Y = DIAL_SIZE / 2;
-const TEXT_OFFSET = 35; // Increased text offset for better spacing
+const TEXT_OFFSET = 35;
 
 type TextAnchorType = 'start' | 'middle' | 'end';
 
@@ -28,26 +28,12 @@ function calculateProgress(currentTime: Date, startTime: Date, endTime: Date): n
   return Math.max(0, Math.min(1, current / total));
 }
 
-function calculateSunPosition(progress: number) {
+function calculateArcPosition(progress: number) {
   // Convert progress (0-1) to angle (-180 to 0 degrees for day arc)
   const angle = -Math.PI + (progress * Math.PI);
   const x = CENTER_X + DIAL_RADIUS * Math.cos(angle);
   const y = CENTER_Y + DIAL_RADIUS * Math.sin(angle);
   return { x, y };
-}
-
-interface StyleProps {
-  container: any;
-  dialContainer: any;
-  currentPrayer: any;
-  timeRemaining: any;
-  instruction: any;
-  prayerList: any;
-  prayerItem: any;
-  prayerNameContainer: any;
-  prayerName: any;
-  prayerTime: any;
-  checkmark: any;
 }
 
 interface Styles {
@@ -62,6 +48,17 @@ interface Styles {
   prayerName: TextStyle;
   prayerTime: TextStyle;
   checkmark: TextStyle;
+  instructionContainer: ViewStyle;
+  missedContainer: ViewStyle;
+  missedText: TextStyle;
+  statusEmoji: TextStyle;
+  statusIcon: TextStyle;
+}
+
+interface PrayerStatus {
+  isCompleted: boolean;
+  isCurrent: boolean;
+  isMissed: boolean;
 }
 
 export default function Index() {
@@ -176,36 +173,103 @@ export default function Index() {
     loadCompletedPrayers();
   }, []);
 
+  const getPrayerStatus = (prayer: string): PrayerStatus => {
+    if (!prayerTimes) return { isCompleted: false, isCurrent: false, isMissed: false };
+    
+    const now = new Date();
+    const prayerTime = prayerTimes[prayer.toLowerCase() as keyof PrayerTimes] as Date;
+    const nextPrayerIndex = (PRAYER_NAMES.indexOf(prayer) + 1) % PRAYER_NAMES.length;
+    const nextPrayerName = PRAYER_NAMES[nextPrayerIndex].toLowerCase() as keyof PrayerTimes;
+    
+    const nextPrayerTime = nextPrayerIndex === 0 
+      ? new Date((prayerTimes.fajr as Date).getTime() + 24 * 60 * 60 * 1000)
+      : prayerTimes[nextPrayerName] as Date;
+
+    const isCompleted = completedPrayers.includes(prayer);
+    const isCurrent = currentPrayer === prayer;
+    const isMissed = !isCompleted && !isCurrent && now > nextPrayerTime;
+
+    return { isCompleted, isCurrent, isMissed };
+  };
+
   const renderSunDial = () => {
     if (!prayerTimes) return null;
 
     const now = new Date();
     const sunrise = prayerTimes.sunrise;
     const sunset = prayerTimes.maghrib;
-    const dayProgress = calculateProgress(now, sunrise, sunset);
-    const sunPosition = calculateSunPosition(dayProgress);
     
     const arcPath = `M ${CENTER_X - DIAL_RADIUS} ${CENTER_Y} A ${DIAL_RADIUS} ${DIAL_RADIUS} 0 1 1 ${CENTER_X + DIAL_RADIUS} ${CENTER_Y}`;
 
-    // Calculate text angles for better positioning
-    const getTextPosition = (progress: number, prayer: string) => {
-      const position = calculateSunPosition(progress);
+    // Calculate prayer positions
+    const getPrayerPosition = (prayer: string) => {
+      const prayerTime = prayerTimes[prayer.toLowerCase() as keyof PrayerTimes] as Date;
+      let progress: number;
+
+      // Get all prayer times for the day
+      const fajr = prayerTimes.fajr;
+      const sunrise = prayerTimes.sunrise;
+      const dhuhr = prayerTimes.dhuhr;
+      const asr = prayerTimes.asr;
+      const maghrib = prayerTimes.maghrib;
+      const isha = prayerTimes.isha;
+
+      // Calculate total day duration (from Fajr to Isha)
+      const totalDuration = isha.getTime() - fajr.getTime();
+
+      // Calculate progress based on time difference from Fajr
+      const timeFromFajr = prayerTime.getTime() - fajr.getTime();
+      progress = timeFromFajr / totalDuration;
+
+      // Ensure progress stays within 0-1 range
+      progress = Math.max(0, Math.min(1, progress));
+
       let textAnchor: TextAnchorType = "middle";
       let dx = 0;
       let dy = TEXT_OFFSET;
 
-      // Adjust text position based on prayer time
-      if (prayer === 'Fajr' || prayer === 'Isha') {
-        textAnchor = prayer === 'Fajr' ? "start" : "end";
-        dx = prayer === 'Fajr' ? -20 : 20;
-      } else if (prayer === 'Maghrib') {
-        textAnchor = "end";
-        dx = 15;
+      // Adjust text positioning based on calculated progress
+      if (progress <= 0.1) { // Fajr
+        textAnchor = "start";
+        dx = -10;
+        dy = TEXT_OFFSET + 5;
+      } else if (progress >= 0.9) { // Isha
+        textAnchor = "start";
+        dx = -10;
+        dy = TEXT_OFFSET + 5; // Match Fajr's vertical position
+      } else if (progress >= 0.45 && progress <= 0.55) { // Dhuhr
         dy = TEXT_OFFSET - 10;
       }
 
+      const position = calculateArcPosition(progress);
       return { position, textAnchor, dx, dy };
     };
+
+    // Calculate sun position based on time between sunrise and sunset
+    const calculateSunProgress = () => {
+      const dhuhr = prayerTimes.dhuhr;
+      const asr = prayerTimes.asr;
+
+      // If before sunrise or after sunset, don't show sun
+      if (now < sunrise || now > sunset) {
+        return -1;
+      }
+
+      // Calculate progress within the current segment
+      if (now < dhuhr) {
+        // Sunrise to Dhuhr: 0 to 0.5
+        return calculateProgress(now, sunrise, dhuhr) * 0.5;
+      } else if (now < asr) {
+        // Dhuhr to Asr: 0.5 to 0.75
+        return 0.5 + (calculateProgress(now, dhuhr, asr) * 0.25);
+      } else {
+        // Asr to Maghrib: 0.75 to 0.95
+        return 0.75 + (calculateProgress(now, asr, sunset) * 0.2);
+      }
+    };
+
+    const sunProgress = calculateSunProgress();
+    const sunPos = sunProgress >= 0 ? calculateArcPosition(sunProgress) : null;
 
     return (
       <View style={styles.dialContainer}>
@@ -223,15 +287,12 @@ export default function Index() {
             stroke={theme.dialProgress}
             strokeWidth="6"
             fill="none"
-            strokeDasharray={`${DIAL_RADIUS * Math.PI * dayProgress}, ${DIAL_RADIUS * Math.PI}`}
+            strokeDasharray={`${DIAL_RADIUS * Math.PI * (sunProgress >= 0 ? sunProgress : 0)}, ${DIAL_RADIUS * Math.PI}`}
           />
           {/* Prayer time markers */}
           {PRAYER_NAMES.map((prayer) => {
-            const prayerTime = prayerTimes[prayer.toLowerCase() as keyof PrayerTimes] as Date;
-            const progress = calculateProgress(prayerTime, sunrise, sunset);
-            const { position, textAnchor, dx, dy } = getTextPosition(progress, prayer);
-            const isCompleted = completedPrayers.includes(prayer);
-            const isCurrent = currentPrayer === prayer;
+            const { position, textAnchor, dx, dy } = getPrayerPosition(prayer);
+            const { isCompleted, isCurrent, isMissed } = getPrayerStatus(prayer);
             
             return (
               <G key={prayer}>
@@ -242,17 +303,6 @@ export default function Index() {
                   fill={isCompleted ? theme.success : (isCurrent ? theme.primary : theme.textSecondary)}
                   opacity={isCurrent ? 1 : 0.8}
                 />
-                <SvgText
-                  x={position.x}
-                  y={position.y + dy}
-                  dx={dx}
-                  fill={theme.text}
-                  fontSize={14}
-                  textAnchor={textAnchor}
-                  fontWeight={isCurrent ? "bold" : "normal"}
-                >
-                  {prayer}
-                </SvgText>
                 {isCompleted && (
                   <Circle
                     cx={position.x}
@@ -265,12 +315,14 @@ export default function Index() {
             );
           })}
           {/* Sun indicator */}
-          <Circle
-            cx={sunPosition.x}
-            cy={sunPosition.y}
-            r="16"
-            fill={theme.sunFill}
-          />
+          {sunPos && (
+            <Circle
+              cx={sunPos.x}
+              cy={sunPos.y}
+              r="16"
+              fill={theme.sunFill}
+            />
+          )}
         </Svg>
       </View>
     );
@@ -295,45 +347,52 @@ export default function Index() {
       
       {renderSunDial()}
       
-      <Text style={[styles.instruction, { color: theme.textSecondary }]}>
-        {completedPrayers.includes(currentPrayer)
-          ? '✓ Prayer completed'
-          : '🤲 Shake when prayer is complete'}
-      </Text>
+      <View style={[styles.instructionContainer, { backgroundColor: theme.primary + '15' }]}>
+        {completedPrayers.includes(currentPrayer) ? (
+          <Text style={[styles.instruction, { color: theme.success }]}>
+            Prayer logged ✓
+          </Text>
+        ) : (
+          <Text style={[styles.instruction, { color: theme.textSecondary }]}>
+            Shake phone after praying {currentPrayer}
+          </Text>
+        )}
+      </View>
       
       <View style={styles.prayerList}>
         {PRAYER_NAMES.map((prayer) => {
-          const isCompleted = completedPrayers.includes(prayer);
-          const isCurrent = currentPrayer === prayer;
+          const { isCompleted, isCurrent, isMissed } = getPrayerStatus(prayer);
+          
           return (
             <View 
               key={prayer} 
               style={[
                 styles.prayerItem, 
                 { 
-                  borderBottomColor: theme.border,
                   backgroundColor: isCurrent ? theme.primary + '15' : 'transparent',
                   borderRadius: 12,
                   marginBottom: spacing.sm,
+                  borderWidth: isCompleted ? 2 : 0,
+                  borderColor: isCompleted ? theme.success : 'transparent',
                 }
               ]}
             >
               <View style={styles.prayerNameContainer}>
+                <Text style={styles.statusIcon}>
+                  {isCompleted ? '🕌' : (isMissed ? '😔' : '  ')}
+                </Text>
                 <Text style={[styles.prayerName, { 
                   color: theme.text,
-                  fontWeight: isCurrent ? 'bold' : 'normal'
+                  fontWeight: isCurrent ? 'bold' : 'normal',
                 }]}>
                   {prayer}
                 </Text>
-                {isCompleted && (
-                  <Text style={[styles.checkmark, { color: theme.success }]}>✓</Text>
-                )}
               </View>
               <Text style={[
                 styles.prayerTime, 
                 { 
                   color: isCurrent ? theme.primary : theme.textSecondary,
-                  fontWeight: isCurrent ? 'bold' : 'normal'
+                  fontWeight: isCurrent ? 'bold' : 'normal',
                 }
               ]}>
                 {prayerTimes[prayer.toLowerCase() as keyof PrayerTimes]
@@ -374,13 +433,8 @@ const styles = StyleSheet.create<Styles>({
   },
   instruction: {
     fontSize: fontSize.regular,
-    marginBottom: spacing.xl,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 20,
-    backgroundColor: 'rgba(74, 144, 226, 0.1)',
-    overflow: 'hidden',
     textAlign: 'center',
+    marginVertical: spacing.xs,
   },
   prayerList: {
     width: '100%',
@@ -392,7 +446,6 @@ const styles = StyleSheet.create<Styles>({
     alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
   },
   prayerNameContainer: {
     flexDirection: 'row',
@@ -409,5 +462,33 @@ const styles = StyleSheet.create<Styles>({
   checkmark: {
     fontSize: fontSize.large,
     marginLeft: spacing.sm,
+  },
+  instructionContainer: {
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 20,
+    width: '100%',
+    alignItems: 'center',
+  },
+  missedContainer: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs / 2,
+    borderRadius: 12,
+  },
+  missedText: {
+    fontSize: fontSize.small,
+    fontStyle: 'italic',
+  },
+  statusEmoji: {
+    fontSize: fontSize.large,
+    marginLeft: spacing.sm,
+  },
+  statusIcon: {
+    fontSize: fontSize.large,
+    marginRight: spacing.sm,
+    width: 30,
+    textAlign: 'center',
   },
 }); 
