@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
-import Svg, { Path, Circle, Line, G, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Circle, G } from 'react-native-svg';
 import { schedulePrayerNotifications } from '../utils/notifications';
 import { colors, spacing, fontSize } from '../config/theme';
 import { Accelerometer } from 'expo-sensors';
@@ -57,6 +57,8 @@ interface Styles {
   streakContainer: ViewStyle;
   streakEmoji: TextStyle;
   streakText: TextStyle;
+  locationContainer: ViewStyle;
+  locationText: TextStyle;
 }
 
 interface PrayerStatus {
@@ -69,6 +71,7 @@ export default function Index() {
   const colorScheme = useColorScheme();
   const theme = colors[colorScheme === 'dark' ? 'dark' : 'light'];
   const [location, setLocation] = useState<Coordinates | null>(null);
+  const [locationName, setLocationName] = useState<string>('');
   const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
   const [currentPrayer, setCurrentPrayer] = useState<string>('');
   const [timeRemaining, setTimeRemaining] = useState<string>('');
@@ -104,22 +107,65 @@ export default function Index() {
 
   useEffect(() => {
     (async () => {
-      const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-      if (locationStatus !== 'granted') {
-        return;
-      }
+      try {
+        // Check if location permission is already granted
+        const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
+        
+        // Only request permission if not already granted
+        if (existingStatus !== 'granted') {
+          const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+          if (locationStatus !== 'granted') {
+            // Handle permission denied case gracefully
+            console.log('Location permission denied');
+            // Use a default location or show an error state
+            return;
+          }
+        }
 
-      const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
-      if (notificationStatus !== 'granted') {
-        return;
-      }
+        // Handle notifications permission similarly
+        const { status: existingNotifStatus } = await Notifications.getPermissionsAsync();
+        if (existingNotifStatus !== 'granted') {
+          const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
+          if (notificationStatus !== 'granted') {
+            console.log('Notification permission denied');
+            // Continue without notifications
+          }
+        }
 
-      const location = await Location.getCurrentPositionAsync({});
-      const coordinates = new Coordinates(
-        location.coords.latitude,
-        location.coords.longitude
-      );
-      setLocation(coordinates);
+        try {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const coordinates = new Coordinates(
+            location.coords.latitude,
+            location.coords.longitude
+          );
+          setLocation(coordinates);
+
+          // Get location name using reverse geocoding
+          const [geocodeResult] = await Location.reverseGeocodeAsync({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+          
+          if (geocodeResult) {
+            const locationString = geocodeResult.city || geocodeResult.region || geocodeResult.country;
+            setLocationName(locationString || '');
+          }
+        } catch (locationError) {
+          console.log('Error getting location:', locationError);
+          // Use a default location as fallback
+          const defaultCoordinates = new Coordinates(51.5074, -0.1278); // London as default
+          setLocation(defaultCoordinates);
+          setLocationName('London');
+        }
+      } catch (error) {
+        console.log('Error in permission handling:', error);
+        // Use default coordinates as fallback
+        const defaultCoordinates = new Coordinates(51.5074, -0.1278);
+        setLocation(defaultCoordinates);
+        setLocationName('London');
+      }
     })();
   }, []);
 
@@ -381,6 +427,11 @@ export default function Index() {
           <Text style={[styles.timeRemaining, { color: theme.textSecondary }]}>
             {timeRemaining} remaining
           </Text>
+          <View style={styles.locationContainer}>
+            <Text style={[styles.locationText, { color: theme.textSecondary }]}>
+              📍 {locationName}
+            </Text>
+          </View>
         </View>
         <View style={[styles.streakContainer, { backgroundColor: theme.primary + '15' }]}>
           <Text style={[styles.streakEmoji]}>🌙</Text>
@@ -399,7 +450,7 @@ export default function Index() {
           </Text>
         ) : (
           <Text style={[styles.instruction, { color: theme.text, fontWeight: 'bold' }]}>
-            Shake phone after praying {currentPrayer}
+            Finished {currentPrayer}? Shake to track!  ✨
           </Text>
         )}
       </View>
@@ -556,5 +607,13 @@ const styles = StyleSheet.create<Styles>({
   streakText: {
     fontSize: fontSize.regular,
     fontWeight: 'bold',
+  },
+  locationContainer: {
+    marginTop: -spacing.lg,
+    marginBottom: spacing.md,
+  },
+  locationText: {
+    fontSize: fontSize.regular,
+    opacity: 0.8,
   },
 }); 
