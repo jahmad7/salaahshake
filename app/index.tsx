@@ -14,7 +14,9 @@ import { PrayerCompletedModal } from '../components/PrayerCompletedModal';
 import { ExtraPrayerModal } from '../components/ExtraPrayerModal';
 
 const PRAYER_NAMES = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
-const SHAKE_THRESHOLD = 1.5;
+const SHAKE_THRESHOLD = 2.0;
+const REQUIRED_SHAKES = 3;
+const SHAKE_TIMEOUT = 2000;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const PADDING = 32;
 const DIAL_SIZE = SCREEN_WIDTH - (PADDING * 2);
@@ -71,9 +73,11 @@ export default function Index() {
   const [completedPrayers, setCompletedPrayers] = useState<string[]>([]);
   const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
   const [streak, setStreak] = useState<number>(0);
-  const [isCompletionModalVisible, setIsCompletionModalVisible] = useState(false);
+  const [isCompletionModalVisible, setIsCompletionModalVisible] = useState(true);
   const [lastCompletedPrayer, setLastCompletedPrayer] = useState('');
   const [isExtraPrayerModalVisible, setIsExtraPrayerModalVisible] = useState(false);
+  const [shakeCount, setShakeCount] = useState(0);
+  const [lastShakeTime, setLastShakeTime] = useState(0);
 
   useEffect(() => {
     let subscription: any;
@@ -92,23 +96,42 @@ export default function Index() {
 
   useEffect(() => {
     const magnitude = Math.sqrt(x * x + y * y + z * z);
+    const now = Date.now();
+
     if (magnitude > SHAKE_THRESHOLD && currentPrayer) {
-      if (!completedPrayers.includes(currentPrayer)) {
-        const newCompletedPrayers = [...completedPrayers, currentPrayer];
-        setCompletedPrayers(newCompletedPrayers);
-        setLastCompletedPrayer(currentPrayer);
-        const today = format(new Date(), 'yyyy-MM-dd');
-        AsyncStorage.setItem(`prayers_${today}`, JSON.stringify(newCompletedPrayers));
-        updateStreak(newCompletedPrayers);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setIsCompletionModalVisible(true);
+      // Reset shake count if too much time has passed since last shake
+      if (now - lastShakeTime > SHAKE_TIMEOUT) {
+        setShakeCount(1);
       } else {
-        // Show extra prayer modal
-        setIsExtraPrayerModalVisible(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setShakeCount(prev => prev + 1);
+      }
+      setLastShakeTime(now);
+
+      // Only proceed if we've reached required number of shakes
+      if (shakeCount + 1 >= REQUIRED_SHAKES) {
+        if (!completedPrayers.includes(currentPrayer)) {
+          const newCompletedPrayers = [...completedPrayers, currentPrayer];
+          setCompletedPrayers(newCompletedPrayers);
+          setLastCompletedPrayer(currentPrayer);
+          
+          const date = currentPrayer === 'Fajr' ? new Date() : format(new Date(), 'yyyy-MM-dd');
+          AsyncStorage.setItem(`prayers_${date}`, JSON.stringify(newCompletedPrayers));
+          
+          updateStreak(newCompletedPrayers);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setIsCompletionModalVisible(true);
+          setShakeCount(0); // Reset count after successful completion
+        } else {
+          setIsExtraPrayerModalVisible(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setShakeCount(0); // Reset count after showing modal
+        }
+      } else {
+        // Provide feedback for partial completion
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     }
-  }, [x, y, z, currentPrayer, completedPrayers]);
+  }, [x, y, z, currentPrayer, completedPrayers, shakeCount, lastShakeTime]);
 
   useEffect(() => {
     (async () => {
@@ -449,7 +472,7 @@ export default function Index() {
         <View style={[styles.streakContainer, { backgroundColor: theme.primary + '15' }]}>
           <Text style={[styles.streakEmoji]}>🌙</Text>
           <Text style={[styles.streakText, { color: theme.text }]}>
-            {streak} {streak === 1 ? 'prayer' : 'prayers'}
+            {streak} salah
           </Text>
         </View>
       </View>

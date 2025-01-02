@@ -3,6 +3,27 @@ import { StyleSheet, Text, View, Modal, TouchableOpacity, Dimensions } from 'rea
 import { BlurView } from 'expo-blur';
 import { colors, spacing, fontSize } from '../config/theme';
 
+const EXTRA_PRAYER_MESSAGES = [
+  {
+    title: "Bonus Round! 🎯",
+    message: "Already logged, but who's counting?",
+    quote: "The Prophet ﷺ said: 'The best prayer after the obligatory prayers is the night prayer.'",
+    encouragement: "Extra prayers hit different fr fr 💫"
+  },
+  {
+    title: "Mashallah x2! ✨",
+    message: "Going above and beyond like a true champion",
+    quote: "The Prophet ﷺ said: 'Prayer is the key to Paradise.'",
+    encouragement: "Stack those blessings bestie 🌟"
+  },
+  {
+    title: "Level Up! 🚀",
+    message: "Already prayed but you're not done yet?",
+    quote: "The Prophet ﷺ said: 'Whoever draws near to Allah by the length of a hand, Allah draws near to them by the length of an arm.'",
+    encouragement: "Your dedication is unmatched 💪"
+  }
+];
+
 interface ExtraPrayerModalProps {
   isVisible: boolean;
   onClose: () => void;
@@ -10,6 +31,8 @@ interface ExtraPrayerModalProps {
 }
 
 export function ExtraPrayerModal({ isVisible, onClose, theme }: ExtraPrayerModalProps) {
+  const randomMessage = EXTRA_PRAYER_MESSAGES[Math.floor(Math.random() * EXTRA_PRAYER_MESSAGES.length)];
+
   return (
     <Modal
       animationType="fade"
@@ -31,19 +54,32 @@ export function ExtraPrayerModal({ isVisible, onClose, theme }: ExtraPrayerModal
           </TouchableOpacity>
 
           <View style={styles.content}>
-            <Text style={[styles.emoji]}>✨</Text>
-            <Text style={[styles.title, { color: theme.text }]}>
-              Already Logged!
-            </Text>
-            <Text style={[styles.message, { color: theme.textSecondary }]}>
-              But remember what the Prophet ﷺ said:
-            </Text>
-            <Text style={[styles.quote, { color: theme.primary }]}>
-              "The best prayer after the prescribed ones is the night prayer."
-            </Text>
-            <Text style={[styles.encouragement, { color: theme.text }]}>
-              Extra prayers = extra blessings 🌟
-            </Text>
+            <View style={[styles.emojiContainer, { backgroundColor: theme.primary + '20' }]}>
+              <Text style={styles.emoji}>✨</Text>
+            </View>
+            
+            <View style={styles.headerContainer}>
+              <Text style={[styles.title, { color: theme.primary }]}>
+                {randomMessage.title}
+              </Text>
+              <Text style={[styles.message, { color: theme.textSecondary }]}>
+                {randomMessage.message}
+              </Text>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
+            <View style={[styles.quoteContainer, { backgroundColor: theme.primary + '15' }]}>
+              <Text style={[styles.quote, { color: theme.text }]}>
+                {randomMessage.quote}
+              </Text>
+            </View>
+
+            <View style={[styles.encouragementContainer, { backgroundColor: theme.success + '15' }]}>
+              <Text style={[styles.encouragement, { color: theme.success }]}>
+                {randomMessage.encouragement}
+              </Text>
+            </View>
           </View>
         </View>
       </BlurView>
@@ -66,11 +102,11 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2
+      height: 4
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
   },
   closeButton: {
     position: 'absolute',
@@ -88,29 +124,56 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    marginTop: spacing.md,
+    width: '100%',
+  },
+  emojiContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
   emoji: {
     fontSize: 48,
+  },
+  headerContainer: {
+    alignItems: 'center',
     marginBottom: spacing.lg,
   },
   title: {
-    fontSize: fontSize.xxlarge,
+    fontSize: fontSize.xlarge,
     fontWeight: 'bold',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   message: {
     fontSize: fontSize.regular,
-    marginBottom: spacing.md,
     textAlign: 'center',
   },
+  divider: {
+    width: '40%',
+    height: 2,
+    borderRadius: 1,
+    marginVertical: spacing.lg,
+  },
+  quoteContainer: {
+    padding: spacing.lg,
+    borderRadius: 16,
+    width: '100%',
+    marginBottom: spacing.lg,
+  },
   quote: {
-    fontSize: fontSize.large,
-    fontWeight: '600',
-    marginBottom: spacing.xl,
+    fontSize: fontSize.regular,
     textAlign: 'center',
     fontStyle: 'italic',
-    paddingHorizontal: spacing.xl,
+    lineHeight: 24,
+  },
+  encouragementContainer: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: 12,
+    width: '100%',
   },
   encouragement: {
     fontSize: fontSize.large,

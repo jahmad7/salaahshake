@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, Modal, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, Modal, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { format } from 'date-fns';
 import { colors, spacing, fontSize } from '../config/theme';
@@ -10,6 +10,19 @@ interface PrayerCompletedModalProps {
   prayerName: string;
   theme: typeof colors['dark'];
 }
+
+const COMPLETION_MESSAGES = [
+  "Mashallah! Every salah is a step closer to Jannah 🌟",
+  "You just leveled up your Iman! Keep that streak going 💫",
+  "Amazing work! Your prayer is lighting up the heavens ✨",
+  "SubhanAllah! You're building your bridge to Paradise 🌈",
+  "Your prayer is better than anything this dunya can offer 🎁",
+  "The angels are celebrating your dedication rn! 👏",
+  "You're making the Prophet ﷺ proud with every salah 💝",
+  "This prayer might be the one that changes everything 🤲",
+  "Your Iman gains are showing! Keep crushing it 💪",
+  "Allah sees your dedication - and that's what matters most ❤️"
+];
 
 export function PrayerCompletedModal({ isVisible, onClose, prayerName, theme }: PrayerCompletedModalProps) {
   return (
@@ -33,22 +46,39 @@ export function PrayerCompletedModal({ isVisible, onClose, prayerName, theme }: 
           </TouchableOpacity>
 
           <View style={styles.content}>
-            <Text style={[styles.emoji]}>🕌</Text>
-            <Text style={[styles.prayerName, { color: theme.text }]}>
-              {prayerName}
-            </Text>
+            <View style={[styles.emojiContainer, { backgroundColor: theme.primary + '20' }]}>
+              <Text style={styles.emoji}>🕌</Text>
+            </View>
+            
+            <View style={styles.headerContainer}>
+              <Text style={[styles.completedText, { color: theme.success }]}>
+                Prayer Completed!
+              </Text>
+              <Text style={[styles.prayerName, { color: theme.primary }]}>
+                {prayerName}
+              </Text>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.border }]} />
+
             <Text style={[styles.arabicPhrase, { color: theme.primary }]}>
               الحمد لله
             </Text>
             <Text style={[styles.transliteration, { color: theme.textSecondary }]}>
               Alhamdulillah
             </Text>
-            <Text style={[styles.message, { color: theme.text }]}>
-              May Allah accept your prayer
-            </Text>
-            <Text style={[styles.timestamp, { color: theme.textSecondary }]}>
-              {format(new Date(), 'h:mm a')}
-            </Text>
+
+            <View style={[styles.messageContainer, { backgroundColor: theme.success + '15' }]}>
+              <Text style={[styles.message, { color: theme.text }]}>
+                {COMPLETION_MESSAGES[Math.floor(Math.random() * COMPLETION_MESSAGES.length)]}
+              </Text>
+            </View>
+
+            <View style={[styles.timeContainer, { backgroundColor: theme.background + '80' }]}>
+              <Text style={[styles.timestamp, { color: theme.textSecondary }]}>
+                {format(new Date(), 'h:mm a')}
+              </Text>
+            </View>
           </View>
         </View>
       </BlurView>
@@ -71,11 +101,11 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2
+      height: 4
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
   },
   closeButton: {
     position: 'absolute',
@@ -93,30 +123,63 @@ const styles = StyleSheet.create({
   },
   content: {
     alignItems: 'center',
-    marginTop: spacing.md,
+    width: '100%',
+  },
+  emojiContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
   },
   emoji: {
     fontSize: 48,
+  },
+  headerContainer: {
+    alignItems: 'center',
     marginBottom: spacing.lg,
+  },
+  completedText: {
+    fontSize: fontSize.large,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
   },
   prayerName: {
     fontSize: fontSize.xxlarge,
     fontWeight: 'bold',
-    marginBottom: spacing.md,
+  },
+  divider: {
+    width: '40%',
+    height: 2,
+    borderRadius: 1,
+    marginVertical: spacing.lg,
   },
   arabicPhrase: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '600',
     marginBottom: spacing.xs,
   },
   transliteration: {
     fontSize: fontSize.large,
     marginBottom: spacing.xl,
+    fontStyle: 'italic',
+  },
+  messageContainer: {
+    padding: spacing.lg,
+    borderRadius: 16,
+    width: '100%',
+    marginBottom: spacing.lg,
   },
   message: {
     fontSize: fontSize.large,
-    marginBottom: spacing.lg,
     textAlign: 'center',
+    lineHeight: 24,
+  },
+  timeContainer: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 12,
   },
   timestamp: {
     fontSize: fontSize.regular,
