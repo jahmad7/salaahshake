@@ -192,7 +192,24 @@ export default function Index() {
 
       if (currentPrayerInfo) {
         setCurrentPrayer(currentPrayerInfo.name);
-        const nextPrayerTime = prayers[(prayers.indexOf(currentPrayerInfo) + 1) % prayers.length].time;
+        const currentIndex = prayers.indexOf(currentPrayerInfo);
+        let nextPrayerTime;
+        
+        if (currentPrayerInfo.name === 'Isha') {
+          // For Isha, we need to look at next day's Fajr
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowPrayerTimes = new PrayerTimes(
+            location!,
+            tomorrow,
+            CalculationMethod.MuslimWorldLeague()
+          );
+          nextPrayerTime = tomorrowPrayerTimes.fajr;
+        } else {
+          // For other prayers, use the next prayer in the current day
+          nextPrayerTime = prayers[(currentIndex + 1) % prayers.length].time;
+        }
+
         const timeLeft = (nextPrayerTime as Date).getTime() - now.getTime();
         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
         const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
@@ -202,7 +219,7 @@ export default function Index() {
 
     const interval = setInterval(updateCurrentPrayer, 1000);
     return () => clearInterval(interval);
-  }, [prayerTimes]);
+  }, [prayerTimes, location]);
 
   useEffect(() => {
     const loadCompletedPrayers = async () => {
