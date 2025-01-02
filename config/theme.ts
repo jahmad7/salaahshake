@@ -10,6 +10,7 @@ export const colors = {
     sunFill: '#FAD02E',
     dialTrack: '#E8EDF2',
     dialProgress: '#3498DB',
+    error: '#FF4B4B',
   },
   dark: {
     primary: '#3498DB',
@@ -22,6 +23,7 @@ export const colors = {
     sunFill: '#F1C40F',
     dialTrack: '#2C3E50',
     dialProgress: '#3498DB',
+    error: '#FF4B4B',
   }
 };
 

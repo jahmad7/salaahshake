@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, useColorScheme, Dimensions, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Dimensions, ViewStyle, TextStyle } from 'react-native';
 import { PrayerTimes, Coordinates, CalculationMethod } from 'adhan';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
@@ -68,7 +68,6 @@ interface PrayerStatus {
 }
 
 export default function Index() {
-  const colorScheme = useColorScheme();
   const theme = colors['dark'];
   const [location, setLocation] = useState<Coordinates | null>(null);
   const [locationName, setLocationName] = useState<string>('');
@@ -226,13 +225,6 @@ export default function Index() {
   }, []);
 
   const updateStreak = async (newCompletedPrayers: string[]) => {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const yesterday = format(new Date(Date.now() - 86400000), 'yyyy-MM-dd');
-    
-    // Get yesterday's prayers
-    const yesterdayPrayers = await AsyncStorage.getItem(`prayers_${yesterday}`);
-    const yesterdayCompleted = yesterdayPrayers ? JSON.parse(yesterdayPrayers) : [];
-    
     // Get current streak
     const currentStreak = await AsyncStorage.getItem('prayer_streak');
     let streakCount = currentStreak ? parseInt(currentStreak) : 0;
@@ -285,14 +277,9 @@ export default function Index() {
     // Calculate prayer positions
     const getPrayerPosition = (prayer: string) => {
       const prayerTime = prayerTimes[prayer.toLowerCase() as keyof PrayerTimes] as Date;
-      let progress: number;
-
+      
       // Get all prayer times for the day
       const fajr = prayerTimes.fajr;
-      const sunrise = prayerTimes.sunrise;
-      const dhuhr = prayerTimes.dhuhr;
-      const asr = prayerTimes.asr;
-      const maghrib = prayerTimes.maghrib;
       const isha = prayerTimes.isha;
 
       // Calculate total day duration (from Fajr to Isha)
@@ -300,53 +287,25 @@ export default function Index() {
 
       // Calculate progress based on time difference from Fajr
       const timeFromFajr = prayerTime.getTime() - fajr.getTime();
-      progress = timeFromFajr / totalDuration;
+      const progress = Math.max(0, Math.min(1, timeFromFajr / totalDuration));
 
-      // Ensure progress stays within 0-1 range
-      progress = Math.max(0, Math.min(1, progress));
-
-      let textAnchor: TextAnchorType = "middle";
-      let dx = 0;
-      let dy = TEXT_OFFSET;
-
-      // Adjust text positioning based on calculated progress
-      if (progress <= 0.1) { // Fajr
-        textAnchor = "start";
-        dx = -10;
-        dy = TEXT_OFFSET + 5;
-      } else if (progress >= 0.9) { // Isha
-        textAnchor = "start";
-        dx = -10;
-        dy = TEXT_OFFSET + 5; // Match Fajr's vertical position
-      } else if (progress >= 0.45 && progress <= 0.55) { // Dhuhr
-        dy = TEXT_OFFSET - 10;
-      }
-
-      const position = calculateArcPosition(progress);
-      return { position, textAnchor, dx, dy };
+      return { position: calculateArcPosition(progress) };
     };
 
-    // Calculate sun position based on time between sunrise and sunset
+    // Calculate sun position based on time between Fajr and Isha
     const calculateSunProgress = () => {
-      const dhuhr = prayerTimes.dhuhr;
-      const asr = prayerTimes.asr;
+      const fajr = prayerTimes.fajr;
+      const isha = prayerTimes.isha;
 
-      // If before sunrise or after sunset, don't show sun
-      if (now < sunrise || now > sunset) {
+      // If before Fajr or after Isha, don't show sun
+      if (now < fajr || now > isha) {
         return -1;
       }
 
-      // Calculate progress within the current segment
-      if (now < dhuhr) {
-        // Sunrise to Dhuhr: 0 to 0.5
-        return calculateProgress(now, sunrise, dhuhr) * 0.5;
-      } else if (now < asr) {
-        // Dhuhr to Asr: 0.5 to 0.75
-        return 0.5 + (calculateProgress(now, dhuhr, asr) * 0.25);
-      } else {
-        // Asr to Maghrib: 0.75 to 0.95
-        return 0.75 + (calculateProgress(now, asr, sunset) * 0.2);
-      }
+      // Calculate progress within the full day
+      const totalDuration = isha.getTime() - fajr.getTime();
+      const timeFromFajr = now.getTime() - fajr.getTime();
+      return Math.max(0, Math.min(1, timeFromFajr / totalDuration));
     };
 
     const sunProgress = calculateSunProgress();
@@ -372,7 +331,7 @@ export default function Index() {
           />
           {/* Prayer time markers */}
           {PRAYER_NAMES.map((prayer) => {
-            const { position, textAnchor, dx, dy } = getPrayerPosition(prayer);
+            const { position } = getPrayerPosition(prayer);
             const { isCompleted, isCurrent, isMissed } = getPrayerStatus(prayer);
             
             return (
@@ -381,7 +340,15 @@ export default function Index() {
                   cx={position.x}
                   cy={position.y}
                   r={isCurrent ? 10 : 8}
-                  fill={isCompleted ? theme.success : (isCurrent ? theme.primary : theme.textSecondary)}
+                  fill={
+                    isCompleted 
+                      ? theme.success 
+                      : isCurrent 
+                        ? theme.primary 
+                        : isMissed 
+                          ? theme.error 
+                          : theme.textSecondary
+                  }
                   opacity={isCurrent ? 1 : 0.8}
                 />
                 {isCompleted && (
@@ -390,6 +357,16 @@ export default function Index() {
                     cy={position.y}
                     r="4"
                     fill={theme.background}
+                  />
+                )}
+                {isMissed && (
+                  <Circle
+                    cx={position.x}
+                    cy={position.y}
+                    r="3"
+                    fill={theme.background}
+                    stroke={theme.error}
+                    strokeWidth="1"
                   />
                 )}
               </G>
