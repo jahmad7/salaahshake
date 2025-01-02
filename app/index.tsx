@@ -69,7 +69,7 @@ interface PrayerStatus {
 
 export default function Index() {
   const colorScheme = useColorScheme();
-  const theme = colors[colorScheme === 'dark' ? 'dark' : 'light'];
+  const theme = colors['dark'];
   const [location, setLocation] = useState<Coordinates | null>(null);
   const [locationName, setLocationName] = useState<string>('');
   const [prayerTimes, setPrayerTimes] = useState<PrayerTimes | null>(null);
@@ -268,7 +268,7 @@ export default function Index() {
 
     const isCompleted = completedPrayers.includes(prayer);
     const isCurrent = currentPrayer === prayer;
-    const isMissed = !isCompleted && !isCurrent && now > nextPrayerTime;
+    const isMissed = !isCompleted && !isCurrent && now > prayerTime && now > nextPrayerTime;
 
     return { isCompleted, isCurrent, isMissed };
   };
