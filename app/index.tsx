@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, Dimensions, ViewStyle, TextStyle } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Dimensions, ViewStyle, TextStyle, TouchableOpacity } from 'react-native';
 import { PrayerTimes, Coordinates, CalculationMethod } from 'adhan';
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
@@ -12,6 +12,7 @@ import { Accelerometer } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
 import { PrayerCompletedModal } from '../components/PrayerCompletedModal';
 import { ExtraPrayerModal } from '../components/ExtraPrayerModal';
+import { LocationModal } from '../components/LocationModal';
 
 const PRAYER_NAMES = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const SHAKE_THRESHOLD = 2.0;
@@ -73,11 +74,12 @@ export default function Index() {
   const [completedPrayers, setCompletedPrayers] = useState<string[]>([]);
   const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
   const [streak, setStreak] = useState<number>(0);
-  const [isCompletionModalVisible, setIsCompletionModalVisible] = useState(true);
+  const [isCompletionModalVisible, setIsCompletionModalVisible] = useState(false);
   const [lastCompletedPrayer, setLastCompletedPrayer] = useState('');
   const [isExtraPrayerModalVisible, setIsExtraPrayerModalVisible] = useState(false);
   const [shakeCount, setShakeCount] = useState(0);
   const [lastShakeTime, setLastShakeTime] = useState(0);
+  const [isLocationModalVisible, setIsLocationModalVisible] = useState(false);
 
   useEffect(() => {
     let subscription: any;
@@ -139,18 +141,49 @@ export default function Index() {
         // Check if location permission is already granted
         const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
         
-        // Only request permission if not already granted
-        if (existingStatus !== 'granted') {
-          const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-          if (locationStatus !== 'granted') {
-            // Handle permission denied case gracefully
-            console.log('Location permission denied');
-            // Use a default location or show an error state
-            return;
+        let coordinates: Coordinates;
+        let locationString = 'London';
+
+        // Only try to get location if permission is granted
+        if (existingStatus === 'granted') {
+          try {
+            const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+            if (locationStatus === 'granted') {
+              const location = await Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+              });
+              coordinates = new Coordinates(
+                location.coords.latitude,
+                location.coords.longitude
+              );
+
+              // Get location name using reverse geocoding
+              const [geocodeResult] = await Location.reverseGeocodeAsync({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              });
+              
+              if (geocodeResult) {
+                locationString = geocodeResult.city || geocodeResult.region || geocodeResult.country || 'London';
+              }
+            } else {
+              // Use London as default if permission denied
+              coordinates = new Coordinates(51.5074, -0.1278);
+            }
+          } catch (locationError) {
+            console.log('Error getting location:', locationError);
+            coordinates = new Coordinates(51.5074, -0.1278);
           }
+        } else {
+          // Use London as default if no permission
+          coordinates = new Coordinates(51.5074, -0.1278);
         }
 
-        // Handle notifications permission similarly
+        // Set the location and name regardless of how we got them
+        setLocation(coordinates);
+        setLocationName(locationString);
+
+        // Handle notifications permission
         const { status: existingNotifStatus } = await Notifications.getPermissionsAsync();
         if (existingNotifStatus !== 'granted') {
           const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
@@ -158,34 +191,6 @@ export default function Index() {
             console.log('Notification permission denied');
             // Continue without notifications
           }
-        }
-
-        try {
-          const location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          const coordinates = new Coordinates(
-            location.coords.latitude,
-            location.coords.longitude
-          );
-          setLocation(coordinates);
-
-          // Get location name using reverse geocoding
-          const [geocodeResult] = await Location.reverseGeocodeAsync({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
-          
-          if (geocodeResult) {
-            const locationString = geocodeResult.city || geocodeResult.region || geocodeResult.country;
-            setLocationName(locationString || '');
-          }
-        } catch (locationError) {
-          console.log('Error getting location:', locationError);
-          // Use a default location as fallback
-          const defaultCoordinates = new Coordinates(51.5074, -0.1278); // London as default
-          setLocation(defaultCoordinates);
-          setLocationName('London');
         }
       } catch (error) {
         console.log('Error in permission handling:', error);
@@ -199,75 +204,120 @@ export default function Index() {
 
   useEffect(() => {
     if (location) {
-      const date = new Date();
-      const prayerTimes = new PrayerTimes(
-        location,
-        date,
-        CalculationMethod.MuslimWorldLeague()
-      );
-      setPrayerTimes(prayerTimes);
-      schedulePrayerNotifications(prayerTimes);
+      const updatePrayerTimes = () => {
+        const date = new Date();
+        const prayerTimes = new PrayerTimes(
+          location,
+          date,
+          CalculationMethod.MuslimWorldLeague()
+        );
+        setPrayerTimes(prayerTimes);
+        schedulePrayerNotifications(prayerTimes);
+      };
+
+      // Update immediately
+      updatePrayerTimes();
+
+      // Then update every minute
+      const interval = setInterval(updatePrayerTimes, 60000);
+
+      return () => clearInterval(interval);
     }
   }, [location]);
 
   useEffect(() => {
     const updateCurrentPrayer = () => {
-      if (!prayerTimes) return;
+      if (!prayerTimes || !location) return;
 
+      // Get the current time in the selected location's timezone
       const now = new Date();
-      const prayers = PRAYER_NAMES.map(name => ({
-        name,
-        time: prayerTimes[name.toLowerCase() as keyof PrayerTimes],
-      }));
-
-      const currentPrayerInfo = prayers.find((prayer, index) => {
-        const nextPrayer = prayers[index + 1];
-        return (
-          now >= prayer.time &&
-          (!nextPrayer || now < nextPrayer.time)
-        );
+      const prayers = PRAYER_NAMES.map(name => {
+        const prayerTime = prayerTimes[name.toLowerCase() as keyof PrayerTimes] as Date;
+        return {
+          name,
+          time: prayerTime,
+        };
       });
 
-      if (currentPrayerInfo) {
-        const currentIndex = prayers.indexOf(currentPrayerInfo);
-        
-        // If current prayer is completed, show the next prayer
-        if (completedPrayers.includes(currentPrayerInfo.name)) {
-          const nextPrayerInfo = prayers[(currentIndex + 1) % prayers.length];
-          setCurrentPrayer(nextPrayerInfo.name);
-        } else {
-          setCurrentPrayer(currentPrayerInfo.name);
-        }
+      // Sort prayers by time
+      prayers.sort((a, b) => a.time.getTime() - b.time.getTime());
 
-        // Always get the next prayer time, regardless of completion status
-        let nextPrayerTime;
-        const nextPrayerIndex = (currentIndex + 1) % prayers.length;
-        
-        if (currentPrayerInfo.name === 'Isha') {
-          // For Isha, we need to look at next day's Fajr
-          const tomorrow = new Date(now);
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          const tomorrowPrayerTimes = new PrayerTimes(
-            location!,
-            tomorrow,
-            CalculationMethod.MuslimWorldLeague()
-          );
-          nextPrayerTime = tomorrowPrayerTimes.fajr;
-        } else {
-          // For other prayers, use the next prayer in the current day
-          nextPrayerTime = prayers[nextPrayerIndex].time;
+      // Find the current prayer based on the time
+      let currentPrayerInfo = prayers[0]; // Default to first prayer
+      for (let i = 0; i < prayers.length; i++) {
+        if (now >= prayers[i].time) {
+          currentPrayerInfo = prayers[i];
+          // If this is the last prayer of the day and it's passed,
+          // we should show the first prayer of the next day
+          if (i === prayers.length - 1 && now >= prayers[i].time) {
+            // Get next day's Fajr
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowPrayerTimes = new PrayerTimes(
+              location,
+              tomorrow,
+              CalculationMethod.MuslimWorldLeague()
+            );
+            const nextPrayerTime = tomorrowPrayerTimes.fajr as Date;
+            
+            // If current prayer is completed, show next prayer
+            if (completedPrayers.includes(currentPrayerInfo.name)) {
+              setCurrentPrayer('Fajr');
+              const timeLeft = nextPrayerTime.getTime() - now.getTime();
+              const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+              const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+              setTimeRemaining(`${hours}h ${minutes}m`);
+            } else {
+              setCurrentPrayer(currentPrayerInfo.name);
+              const timeLeft = nextPrayerTime.getTime() - now.getTime();
+              const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+              const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+              setTimeRemaining(`${hours}h ${minutes}m`);
+            }
+            return;
+          }
         }
-
-        const timeLeft = (nextPrayerTime as Date).getTime() - now.getTime();
-        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-        setTimeRemaining(`${hours}h ${minutes}m`);
       }
+
+      const currentIndex = prayers.indexOf(currentPrayerInfo);
+      
+      // If current prayer is completed, show the next prayer
+      if (completedPrayers.includes(currentPrayerInfo.name)) {
+        const nextPrayerInfo = prayers[(currentIndex + 1) % prayers.length];
+        setCurrentPrayer(nextPrayerInfo.name);
+      } else {
+        setCurrentPrayer(currentPrayerInfo.name);
+      }
+
+      // Calculate time remaining to next prayer
+      const nextPrayerIndex = (currentIndex + 1) % prayers.length;
+      let nextPrayerTime;
+
+      if (currentPrayerInfo.name === 'Isha') {
+        // For Isha, we need to look at next day's Fajr
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowPrayerTimes = new PrayerTimes(
+          location,
+          tomorrow,
+          CalculationMethod.MuslimWorldLeague()
+        );
+        nextPrayerTime = tomorrowPrayerTimes.fajr;
+      } else {
+        nextPrayerTime = prayers[nextPrayerIndex].time;
+      }
+
+      const timeLeft = (nextPrayerTime as Date).getTime() - now.getTime();
+      const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+      setTimeRemaining(`${hours}h ${minutes}m`);
     };
 
-    const interval = setInterval(updateCurrentPrayer, 1000);
+    // Update immediately and then every minute
+    updateCurrentPrayer();
+    const interval = setInterval(updateCurrentPrayer, 60000);
     return () => clearInterval(interval);
-  }, [prayerTimes, location]);
+  }, [prayerTimes, location, completedPrayers]);
 
   useEffect(() => {
     const loadCompletedPrayers = async () => {
@@ -442,6 +492,11 @@ export default function Index() {
     );
   };
 
+  const handleLocationSelect = (coordinates: Coordinates, name: string) => {
+    setLocation(coordinates);
+    setLocationName(name);
+  };
+
   if (!location || !prayerTimes) {
     return (
       <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -463,11 +518,14 @@ export default function Index() {
               : `${timeRemaining} remaining`
             }
           </Text>
-          <View style={styles.locationContainer}>
+          <TouchableOpacity 
+            style={styles.locationContainer}
+            onPress={() => setIsLocationModalVisible(true)}
+          >
             <Text style={[styles.locationText, { color: theme.textSecondary }]}>
               📍 {locationName}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
         <View style={[styles.streakContainer, { backgroundColor: theme.primary + '15' }]}>
           <Text style={[styles.streakEmoji]}>🌙</Text>
@@ -546,6 +604,13 @@ export default function Index() {
       <ExtraPrayerModal
         isVisible={isExtraPrayerModalVisible}
         onClose={() => setIsExtraPrayerModalVisible(false)}
+        theme={theme}
+      />
+
+      <LocationModal
+        isVisible={isLocationModalVisible}
+        onClose={() => setIsLocationModalVisible(false)}
+        onSelectLocation={handleLocationSelect}
         theme={theme}
       />
     </View>
