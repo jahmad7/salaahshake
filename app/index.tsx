@@ -18,15 +18,6 @@ const DIAL_SIZE = SCREEN_WIDTH - (PADDING * 2);
 const DIAL_RADIUS = (DIAL_SIZE / 2) * 0.85;
 const CENTER_X = DIAL_SIZE / 2;
 const CENTER_Y = DIAL_SIZE / 2;
-const TEXT_OFFSET = 35;
-
-type TextAnchorType = 'start' | 'middle' | 'end';
-
-function calculateProgress(currentTime: Date, startTime: Date, endTime: Date): number {
-  const total = endTime.getTime() - startTime.getTime();
-  const current = currentTime.getTime() - startTime.getTime();
-  return Math.max(0, Math.min(1, current / total));
-}
 
 function calculateArcPosition(progress: number) {
   // Convert progress (0-1) to angle (-180 to 0 degrees for day arc)

@@ -10,7 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jahmad7.salaahshake"
+      "bundleIdentifier": "com.jahmad7.salaahshake",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We need your location to calculate accurate prayer times for your area.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need your location to calculate accurate prayer times for your area.",
+        "NSLocationAlwaysUsageDescription": "We need your location to calculate accurate prayer times for your area.",
+        "NSMotionUsageDescription": "We need access to motion detection to track prayer completion through shaking.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
     },
     "android": {
       "adaptiveIcon": {
