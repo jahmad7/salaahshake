@@ -9,6 +9,9 @@ import Svg, { Path, Circle, G } from 'react-native-svg';
 import { schedulePrayerNotifications } from '../utils/notifications';
 import { colors, spacing, fontSize } from '../config/theme';
 import { Accelerometer } from 'expo-sensors';
+import * as Haptics from 'expo-haptics';
+import { PrayerCompletedModal } from '../components/PrayerCompletedModal';
+import { ExtraPrayerModal } from '../components/ExtraPrayerModal';
 
 const PRAYER_NAMES = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
 const SHAKE_THRESHOLD = 1.5;
@@ -68,6 +71,9 @@ export default function Index() {
   const [completedPrayers, setCompletedPrayers] = useState<string[]>([]);
   const [{ x, y, z }, setData] = useState({ x: 0, y: 0, z: 0 });
   const [streak, setStreak] = useState<number>(0);
+  const [isCompletionModalVisible, setIsCompletionModalVisible] = useState(false);
+  const [lastCompletedPrayer, setLastCompletedPrayer] = useState('');
+  const [isExtraPrayerModalVisible, setIsExtraPrayerModalVisible] = useState(false);
 
   useEffect(() => {
     let subscription: any;
@@ -86,12 +92,21 @@ export default function Index() {
 
   useEffect(() => {
     const magnitude = Math.sqrt(x * x + y * y + z * z);
-    if (magnitude > SHAKE_THRESHOLD && currentPrayer && !completedPrayers.includes(currentPrayer)) {
-      const newCompletedPrayers = [...completedPrayers, currentPrayer];
-      setCompletedPrayers(newCompletedPrayers);
-      const today = format(new Date(), 'yyyy-MM-dd');
-      AsyncStorage.setItem(`prayers_${today}`, JSON.stringify(newCompletedPrayers));
-      updateStreak(newCompletedPrayers);
+    if (magnitude > SHAKE_THRESHOLD && currentPrayer) {
+      if (!completedPrayers.includes(currentPrayer)) {
+        const newCompletedPrayers = [...completedPrayers, currentPrayer];
+        setCompletedPrayers(newCompletedPrayers);
+        setLastCompletedPrayer(currentPrayer);
+        const today = format(new Date(), 'yyyy-MM-dd');
+        AsyncStorage.setItem(`prayers_${today}`, JSON.stringify(newCompletedPrayers));
+        updateStreak(newCompletedPrayers);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setIsCompletionModalVisible(true);
+      } else {
+        // Show extra prayer modal
+        setIsExtraPrayerModalVisible(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     }
   }, [x, y, z, currentPrayer, completedPrayers]);
 
@@ -497,6 +512,19 @@ export default function Index() {
           );
         })}
       </View>
+      
+      <PrayerCompletedModal
+        isVisible={isCompletionModalVisible}
+        onClose={() => setIsCompletionModalVisible(false)}
+        prayerName={lastCompletedPrayer}
+        theme={theme}
+      />
+
+      <ExtraPrayerModal
+        isVisible={isExtraPrayerModalVisible}
+        onClose={() => setIsExtraPrayerModalVisible(false)}
+        theme={theme}
+      />
     </View>
   );
 }
