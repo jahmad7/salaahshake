@@ -191,9 +191,19 @@ export default function Index() {
       });
 
       if (currentPrayerInfo) {
-        setCurrentPrayer(currentPrayerInfo.name);
         const currentIndex = prayers.indexOf(currentPrayerInfo);
+        
+        // If current prayer is completed, show the next prayer
+        if (completedPrayers.includes(currentPrayerInfo.name)) {
+          const nextPrayerInfo = prayers[(currentIndex + 1) % prayers.length];
+          setCurrentPrayer(nextPrayerInfo.name);
+        } else {
+          setCurrentPrayer(currentPrayerInfo.name);
+        }
+
+        // Always get the next prayer time, regardless of completion status
         let nextPrayerTime;
+        const nextPrayerIndex = (currentIndex + 1) % prayers.length;
         
         if (currentPrayerInfo.name === 'Isha') {
           // For Isha, we need to look at next day's Fajr
@@ -207,7 +217,7 @@ export default function Index() {
           nextPrayerTime = tomorrowPrayerTimes.fajr;
         } else {
           // For other prayers, use the next prayer in the current day
-          nextPrayerTime = prayers[(currentIndex + 1) % prayers.length].time;
+          nextPrayerTime = prayers[nextPrayerIndex].time;
         }
 
         const timeLeft = (nextPrayerTime as Date).getTime() - now.getTime();
@@ -410,7 +420,10 @@ export default function Index() {
             {currentPrayer}
           </Text>
           <Text style={[styles.timeRemaining, { color: theme.textSecondary }]}>
-            {timeRemaining} remaining
+            {completedPrayers.includes(currentPrayer) 
+              ? `Opens in ${timeRemaining}`
+              : `${timeRemaining} remaining`
+            }
           </Text>
           <View style={styles.locationContainer}>
             <Text style={[styles.locationText, { color: theme.textSecondary }]}>
@@ -431,7 +444,7 @@ export default function Index() {
       <View style={[styles.instructionContainer, { backgroundColor: theme.primary + '15' }]}>
         {completedPrayers.includes(currentPrayer) ? (
           <Text style={[styles.instruction, { color: theme.success, fontWeight: 'bold' }]}>
-            Prayer logged ✓
+            Mashallah! {currentPrayer} completed ✨
           </Text>
         ) : (
           <Text style={[styles.instruction, { color: theme.text, fontWeight: 'bold' }]}>
