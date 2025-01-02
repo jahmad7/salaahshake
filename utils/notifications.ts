@@ -1,5 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { PrayerTimes } from 'adhan';
+import { format, addMinutes } from 'date-fns';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -20,18 +22,61 @@ export async function schedulePrayerNotifications(prayerTimes: PrayerTimes) {
     { name: 'Isha', time: prayerTimes.isha },
   ];
 
-  for (const prayer of prayers) {
+  const messages = {
+    Fajr: {
+      title: "Fajr check ✨",
+      body: "sleep is temporary, jannah is forever"
+    },
+    Dhuhr: {
+      title: "Dhuhr time bestie 🤲",
+      body: "lunch break = prayer break"
+    },
+    Asr: {
+      title: "Asr loading... ⌛",
+      body: "3pm slump? prayer pump"
+    },
+    Maghrib: {
+      title: "Maghrib just dropped 🌙",
+      body: "dinner can wait"
+    },
+    Isha: {
+      title: "it's Isha o'clock 💫",
+      body: "TikTok << prayer tok"
+    }
+  } as const;
+
+  const currentStreak = await AsyncStorage.getItem('prayer_streak');
+  const streak = currentStreak ? parseInt(currentStreak) : 0;
+
+  for (let i = 0; i < prayers.length; i++) {
+    const prayer = prayers[i];
     const trigger = new Date(prayer.time);
+    const now = new Date();
     
-    // Only schedule if the prayer time hasn't passed today
-    if (trigger > new Date()) {
+    if (trigger > now) {
+      // Schedule regular prayer notification
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: `Time for ${prayer.name} Prayer`,
-          body: 'Shake your phone after completing the prayer to log it.',
+          title: messages[prayer.name as keyof typeof messages].title,
+          body: messages[prayer.name as keyof typeof messages].body,
         },
         trigger,
       });
+
+      // Schedule streak reminder 30 minutes before next prayer
+      const nextPrayer = prayers[(i + 1) % prayers.length];
+      const reminderTime = addMinutes(trigger, nextPrayer ? 
+        Math.floor((nextPrayer.time.getTime() - trigger.getTime()) * 0.8 / (1000 * 60)) : 90);
+
+      if (reminderTime > now && streak > 0) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "🌙 Don't break your streak!",
+            body: `${streak} streak - Pray ${prayer.name} soon!`,
+          },
+          trigger: reminderTime,
+        });
+      }
     }
   }
 } 

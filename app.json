@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jahmad7.salaahshake"
     },
     "android": {
       "adaptiveIcon": {
@@ -45,6 +46,12 @@
         "projectId": "37e7cee0-e363-4829-bd30-88b3dc65b1cd"
       }
     },
-    "owner": "jahmad7"
+    "owner": "jahmad7",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/37e7cee0-e363-4829-bd30-88b3dc65b1cd"
+    }
   }
 }
