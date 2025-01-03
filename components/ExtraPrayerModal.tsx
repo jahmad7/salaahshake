@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Modal, TouchableOpacity, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { colors, spacing, fontSize } from '../config/theme';
@@ -31,7 +31,16 @@ interface ExtraPrayerModalProps {
 }
 
 export function ExtraPrayerModal({ isVisible, onClose, theme }: ExtraPrayerModalProps) {
-  const randomMessage = EXTRA_PRAYER_MESSAGES[Math.floor(Math.random() * EXTRA_PRAYER_MESSAGES.length)];
+  const [currentMessage, setCurrentMessage] = useState(EXTRA_PRAYER_MESSAGES[0]);
+
+  // Only update the message when the modal becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      setCurrentMessage(
+        EXTRA_PRAYER_MESSAGES[Math.floor(Math.random() * EXTRA_PRAYER_MESSAGES.length)]
+      );
+    }
+  }, [isVisible]);
 
   return (
     <Modal
@@ -60,10 +69,10 @@ export function ExtraPrayerModal({ isVisible, onClose, theme }: ExtraPrayerModal
             
             <View style={styles.headerContainer}>
               <Text style={[styles.title, { color: theme.primary }]}>
-                {randomMessage.title}
+                {currentMessage.title}
               </Text>
               <Text style={[styles.message, { color: theme.textSecondary }]}>
-                {randomMessage.message}
+                {currentMessage.message}
               </Text>
             </View>
 
@@ -71,13 +80,13 @@ export function ExtraPrayerModal({ isVisible, onClose, theme }: ExtraPrayerModal
 
             <View style={[styles.quoteContainer, { backgroundColor: theme.primary + '15' }]}>
               <Text style={[styles.quote, { color: theme.text }]}>
-                {randomMessage.quote}
+                {currentMessage.quote}
               </Text>
             </View>
 
             <View style={[styles.encouragementContainer, { backgroundColor: theme.success + '15' }]}>
               <Text style={[styles.encouragement, { color: theme.success }]}>
-                {randomMessage.encouragement}
+                {currentMessage.encouragement}
               </Text>
             </View>
           </View>

@@ -5,12 +5,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Coordinates } from 'adhan';
 import { colors, spacing, fontSize } from '../config/theme';
+import * as Location from 'expo-location';
 
 // Common cities with their coordinates and time zones
 const PRESET_CITIES = [
@@ -54,9 +55,56 @@ interface LocationModalProps {
 }
 
 export function LocationModal({ isVisible, onClose, onSelectLocation, theme }: LocationModalProps) {
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+
   const handleSelectCity = (city: { name: string; coordinates: Coordinates; timezone: string }) => {
     onSelectLocation(city.coordinates, city.name);
     onClose();
+  };
+
+  const handleGetCurrentLocation = async () => {
+    setIsLoadingLocation(true);
+    try {
+      // Check current permission status
+      const { status: existingStatus } = await Location.getForegroundPermissionsAsync();
+      
+      // If not granted, request permission
+      if (existingStatus !== 'granted') {
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        if (newStatus !== 'granted') {
+          // Permission denied
+          setIsLoadingLocation(false);
+          return;
+        }
+      }
+
+      // Get current location
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      // Get location name using reverse geocoding
+      const [geocodeResult] = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      const coordinates = new Coordinates(
+        location.coords.latitude,
+        location.coords.longitude
+      );
+
+      const locationName = geocodeResult
+        ? geocodeResult.city || geocodeResult.region || geocodeResult.country || 'Current Location'
+        : 'Current Location';
+
+      onSelectLocation(coordinates, locationName);
+      onClose();
+    } catch (error) {
+      console.log('Error getting current location:', error);
+    } finally {
+      setIsLoadingLocation(false);
+    }
   };
 
   return (
@@ -74,6 +122,27 @@ export function LocationModal({ isVisible, onClose, onSelectLocation, theme }: L
               <Text style={[styles.closeButtonText, { color: theme.text }]}>✕</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity
+            style={[styles.currentLocationButton, { backgroundColor: theme.primary + '15' }]}
+            onPress={handleGetCurrentLocation}
+            disabled={isLoadingLocation}
+          >
+            {isLoadingLocation ? (
+              <ActivityIndicator size="small" color={theme.primary} />
+            ) : (
+              <>
+                <Text style={[styles.currentLocationText, { color: theme.text }]}>
+                  📍 Use Current Location
+                </Text>
+                <Text style={[styles.currentLocationSubtext, { color: theme.textSecondary }]}>
+                  Get prayer times for your location
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
 
           <ScrollView style={styles.citiesList}>
             {PRESET_CITIES.map((city) => (
@@ -145,5 +214,25 @@ const styles = StyleSheet.create({
   timezone: {
     fontSize: fontSize.regular,
     opacity: 0.8,
+  },
+  currentLocationButton: {
+    padding: spacing.lg,
+    borderRadius: 12,
+    marginBottom: spacing.md,
+    width: '100%',
+  },
+  currentLocationText: {
+    fontSize: fontSize.large,
+    fontWeight: '500',
+    marginBottom: spacing.xs,
+  },
+  currentLocationSubtext: {
+    fontSize: fontSize.regular,
+    opacity: 0.8,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    marginBottom: spacing.md,
   },
 }); 

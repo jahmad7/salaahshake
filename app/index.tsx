@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format } from 'date-fns';
-import Svg, { Path, Circle, G } from 'react-native-svg';
+import Svg, { Path, Circle, G, Text as SvgText } from 'react-native-svg';
 import { schedulePrayerNotifications } from '../utils/notifications';
 import { colors, spacing, fontSize } from '../config/theme';
 import { Accelerometer } from 'expo-sensors';
@@ -100,7 +100,10 @@ export default function Index() {
     const magnitude = Math.sqrt(x * x + y * y + z * z);
     const now = Date.now();
 
-    if (magnitude > SHAKE_THRESHOLD && currentPrayer) {
+    // Only process shake if we're not showing any modals
+    if (magnitude > SHAKE_THRESHOLD && currentPrayer && 
+        !isCompletionModalVisible && !isExtraPrayerModalVisible) {
+      
       // Reset shake count if too much time has passed since last shake
       if (now - lastShakeTime > SHAKE_TIMEOUT) {
         setShakeCount(1);
@@ -111,29 +114,76 @@ export default function Index() {
 
       // Only proceed if we've reached required number of shakes
       if (shakeCount + 1 >= REQUIRED_SHAKES) {
+        // Check if the current prayer time has actually arrived
+        if (!prayerTimes) return;
+        
+        const currentTime = new Date();
+        const currentPrayerTime = prayerTimes[currentPrayer.toLowerCase() as keyof PrayerTimes] as Date;
+
+        // If prayer hasn't started yet, show error and extra prayer modal
+        if (currentTime < currentPrayerTime) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          setIsExtraPrayerModalVisible(true);
+          setShakeCount(0);
+          return;
+        }
+
+        // Special handling for Fajr after Isha completion
+        if (currentPrayer === 'Fajr' && completedPrayers.includes('Isha')) {
+          // Get tomorrow's Fajr time
+          const tomorrow = new Date(currentTime);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowPrayerTimes = new PrayerTimes(
+            location!,
+            tomorrow,
+            CalculationMethod.MuslimWorldLeague()
+          );
+          const tomorrowFajr = tomorrowPrayerTimes.fajr as Date;
+
+          // Don't allow logging if it's not yet time for tomorrow's Fajr
+          if (currentTime < tomorrowFajr) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            setShakeCount(0);
+            return;
+          }
+        } else {
+          // Don't allow logging future prayers
+          if (currentTime < currentPrayerTime) {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            setShakeCount(0);
+            return;
+          }
+        }
+
+        // Prevent logging if we're already showing a modal
         if (!completedPrayers.includes(currentPrayer)) {
+          // Disable shake detection temporarily
+          setShakeCount(0);
+          
           const newCompletedPrayers = [...completedPrayers, currentPrayer];
           setCompletedPrayers(newCompletedPrayers);
           setLastCompletedPrayer(currentPrayer);
           
-          const date = currentPrayer === 'Fajr' ? new Date() : format(new Date(), 'yyyy-MM-dd');
+          // Store with the correct date
+          const date = format(currentTime, 'yyyy-MM-dd');
           AsyncStorage.setItem(`prayers_${date}`, JSON.stringify(newCompletedPrayers));
           
           updateStreak(newCompletedPrayers);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           setIsCompletionModalVisible(true);
-          setShakeCount(0); // Reset count after successful completion
-        } else {
+        } else if (!isExtraPrayerModalVisible) {
+          // Only show extra prayer modal if it's not already visible
           setIsExtraPrayerModalVisible(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setShakeCount(0); // Reset count after showing modal
+          setShakeCount(0);
         }
       } else {
         // Provide feedback for partial completion
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     }
-  }, [x, y, z, currentPrayer, completedPrayers, shakeCount, lastShakeTime]);
+  }, [x, y, z, currentPrayer, completedPrayers, shakeCount, lastShakeTime, prayerTimes, 
+      isCompletionModalVisible, isExtraPrayerModalVisible, location]);
 
   useEffect(() => {
     (async () => {
@@ -144,11 +194,11 @@ export default function Index() {
         let coordinates: Coordinates;
         let locationString = 'London';
 
-        // Only try to get location if permission is granted
-        if (existingStatus === 'granted') {
-          try {
-            const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-            if (locationStatus === 'granted') {
+        // Request permission if not already granted
+        if (existingStatus !== 'granted') {
+          const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+          if (locationStatus === 'granted') {
+            try {
               const location = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
               });
@@ -166,17 +216,38 @@ export default function Index() {
               if (geocodeResult) {
                 locationString = geocodeResult.city || geocodeResult.region || geocodeResult.country || 'London';
               }
-            } else {
-              // Use London as default if permission denied
+            } catch (locationError) {
+              console.log('Error getting location:', locationError);
               coordinates = new Coordinates(51.5074, -0.1278);
+            }
+          } else {
+            // Use London as default if permission denied
+            coordinates = new Coordinates(51.5074, -0.1278);
+          }
+        } else {
+          // Permission was already granted, get the location
+          try {
+            const location = await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            });
+            coordinates = new Coordinates(
+              location.coords.latitude,
+              location.coords.longitude
+            );
+
+            // Get location name using reverse geocoding
+            const [geocodeResult] = await Location.reverseGeocodeAsync({
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            });
+            
+            if (geocodeResult) {
+              locationString = geocodeResult.city || geocodeResult.region || geocodeResult.country || 'London';
             }
           } catch (locationError) {
             console.log('Error getting location:', locationError);
             coordinates = new Coordinates(51.5074, -0.1278);
           }
-        } else {
-          // Use London as default if no permission
-          coordinates = new Coordinates(51.5074, -0.1278);
         }
 
         // Set the location and name regardless of how we got them
@@ -229,7 +300,6 @@ export default function Index() {
     const updateCurrentPrayer = () => {
       if (!prayerTimes || !location) return;
 
-      // Get the current time in the selected location's timezone
       const now = new Date();
       const prayers = PRAYER_NAMES.map(name => {
         const prayerTime = prayerTimes[name.toLowerCase() as keyof PrayerTimes] as Date;
@@ -242,55 +312,29 @@ export default function Index() {
       // Sort prayers by time
       prayers.sort((a, b) => a.time.getTime() - b.time.getTime());
 
-      // Find the current prayer based on the time
-      let currentPrayerInfo = prayers[0]; // Default to first prayer
-      for (let i = 0; i < prayers.length; i++) {
+      // Find the current prayer based on time
+      let currentPrayerInfo = prayers[0];
+      for (let i = prayers.length - 1; i >= 0; i--) {
         if (now >= prayers[i].time) {
           currentPrayerInfo = prayers[i];
-          // If this is the last prayer of the day and it's passed,
-          // we should show the first prayer of the next day
-          if (i === prayers.length - 1 && now >= prayers[i].time) {
-            // Get next day's Fajr
-            const tomorrow = new Date(now);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            const tomorrowPrayerTimes = new PrayerTimes(
-              location,
-              tomorrow,
-              CalculationMethod.MuslimWorldLeague()
-            );
-            const nextPrayerTime = tomorrowPrayerTimes.fajr as Date;
-            
-            // If current prayer is completed, show next prayer
-            if (completedPrayers.includes(currentPrayerInfo.name)) {
-              setCurrentPrayer('Fajr');
-              const timeLeft = nextPrayerTime.getTime() - now.getTime();
-              const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-              const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-              setTimeRemaining(`${hours}h ${minutes}m`);
+          // If this prayer is completed, look for the next uncompleted one
+          if (completedPrayers.includes(prayers[i].name)) {
+            const nextIndex = (i + 1) % prayers.length;
+            if (nextIndex === 0) {
+              // If we've completed all prayers, show next day's Fajr
+              currentPrayerInfo = prayers[0];
             } else {
-              setCurrentPrayer(currentPrayerInfo.name);
-              const timeLeft = nextPrayerTime.getTime() - now.getTime();
-              const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-              const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-              setTimeRemaining(`${hours}h ${minutes}m`);
+              currentPrayerInfo = prayers[nextIndex];
             }
-            return;
           }
+          break;
         }
       }
 
-      const currentIndex = prayers.indexOf(currentPrayerInfo);
-      
-      // If current prayer is completed, show the next prayer
-      if (completedPrayers.includes(currentPrayerInfo.name)) {
-        const nextPrayerInfo = prayers[(currentIndex + 1) % prayers.length];
-        setCurrentPrayer(nextPrayerInfo.name);
-      } else {
-        setCurrentPrayer(currentPrayerInfo.name);
-      }
+      setCurrentPrayer(currentPrayerInfo.name);
 
       // Calculate time remaining to next prayer
-      const nextPrayerIndex = (currentIndex + 1) % prayers.length;
+      const currentIndex = prayers.findIndex(p => p.name === currentPrayerInfo.name);
       let nextPrayerTime;
 
       if (currentPrayerInfo.name === 'Isha') {
@@ -304,7 +348,8 @@ export default function Index() {
         );
         nextPrayerTime = tomorrowPrayerTimes.fajr;
       } else {
-        nextPrayerTime = prayers[nextPrayerIndex].time;
+        const nextIndex = (currentIndex + 1) % prayers.length;
+        nextPrayerTime = prayers[nextIndex].time;
       }
 
       const timeLeft = (nextPrayerTime as Date).getTime() - now.getTime();
@@ -325,6 +370,9 @@ export default function Index() {
       const stored = await AsyncStorage.getItem(`prayers_${today}`);
       if (stored) {
         setCompletedPrayers(JSON.parse(stored));
+      } else {
+        // Reset completed prayers for the new day
+        setCompletedPrayers([]);
       }
     };
     loadCompletedPrayers();
@@ -435,6 +483,26 @@ export default function Index() {
             fill="none"
             strokeDasharray={`${DIAL_RADIUS * Math.PI * (sunProgress >= 0 ? sunProgress : 0)}, ${DIAL_RADIUS * Math.PI}`}
           />
+          {/* Current Date and Time */}
+          <SvgText
+            x={CENTER_X}
+            y={CENTER_Y - 20}
+            fill={theme.textSecondary}
+            fontSize={fontSize.regular}
+            textAnchor="middle"
+          >
+            {format(now, 'EEEE, MMMM d')}
+          </SvgText>
+          <SvgText
+            x={CENTER_X}
+            y={CENTER_Y}
+            fill={theme.text}
+            fontSize={fontSize.large}
+            fontWeight="bold"
+            textAnchor="middle"
+          >
+            {format(now, 'h:mm a')}
+          </SvgText>
           {/* Prayer time markers */}
           {PRAYER_NAMES.map((prayer) => {
             const { position } = getPrayerPosition(prayer);

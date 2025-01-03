@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, Modal, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { format } from 'date-fns';
@@ -25,6 +25,17 @@ const COMPLETION_MESSAGES = [
 ];
 
 export function PrayerCompletedModal({ isVisible, onClose, prayerName, theme }: PrayerCompletedModalProps) {
+  const [currentMessage, setCurrentMessage] = useState(COMPLETION_MESSAGES[0]);
+
+  // Only update the message when the modal becomes visible
+  useEffect(() => {
+    if (isVisible) {
+      setCurrentMessage(
+        COMPLETION_MESSAGES[Math.floor(Math.random() * COMPLETION_MESSAGES.length)]
+      );
+    }
+  }, [isVisible]);
+
   return (
     <Modal
       animationType="fade"
@@ -70,7 +81,7 @@ export function PrayerCompletedModal({ isVisible, onClose, prayerName, theme }: 
 
             <View style={[styles.messageContainer, { backgroundColor: theme.success + '15' }]}>
               <Text style={[styles.message, { color: theme.text }]}>
-                {COMPLETION_MESSAGES[Math.floor(Math.random() * COMPLETION_MESSAGES.length)]}
+                {currentMessage}
               </Text>
             </View>
 
